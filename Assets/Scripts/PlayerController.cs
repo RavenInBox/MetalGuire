@@ -1,4 +1,5 @@
 using Cinemachine;
+using System.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -8,26 +9,32 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
-        if (!isDetect)
+        if(Input.GetKey(KeyCode.Escape)) Application.Quit();
+
+        if (!isUp)
         {
-            InputCheck();
-            InteractiveSystem();
-            FlipPosition();
-            DancingDu();
-            SmootAnimation();
+            if (!isDetect)
+            {
+                InputCheck();
+                InteractiveSystem();
+                FlipPosition();
+                DancingDu();
+                SmootAnimation();
+            }
+            else
+            {
+                AnimatorController("Detect");
+            }
         }
-        else
-        {
-            Invoke(nameof(Reset), 5f);
-            Detected.SetActive(true);
-            AnimatorController("Detect");
-        }
+
+        Reset();
+        ChekPoint();
     }
 
     #region variables
     [Header("Movement")]
-    [SerializeField][Range (5, 80)] private float speedWalk;
-    [SerializeField][Range (5, 80)] private float speedRun;
+    [SerializeField][Range (1, 80)] private float speedWalk;
+    [SerializeField][Range (1, 80)] private float speedRun;
 
     [Header("Checkers")]
     [SerializeField] private Transform groundCheck;
@@ -37,6 +44,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private LayerMask jumpLayer;
     [SerializeField] private LayerMask warningLayer;
     [SerializeField] private LayerMask detectLayer;
+    [SerializeField] private LayerMask ckPointLayer;
 
     [Header ("Animation")]
     [SerializeField] private Animator animator;
@@ -54,7 +62,9 @@ public class PlayerController : MonoBehaviour
     private Rigidbody2D rb;
     private float horizontal, HorizontalAsist;
     private float DanceEnter, timeToDance = 500;
-    private bool rightFlip = true, inputWalk = false, isDetect;
+    private bool rightFlip = true, inputWalk = false, isUp, isDetect = false;
+
+    public bool isReset;
 
     private string
         // AxisRaw
@@ -140,8 +150,15 @@ public class PlayerController : MonoBehaviour
                 AnimatorController(AnimSimpleJump);
                 break;
             case 2:
+                transform.position = new Vector2(transform.position.x + 1.5f, transform.position.y + 2f);
+                AnimatorController("UpBox");
                 break;
         }
+    }
+
+    private void ChekPoint()
+    {
+        if (InteractiveType(ckPointLayer)) ckPoint = Transfr();
     }
     #endregion
 
@@ -164,13 +181,15 @@ public class PlayerController : MonoBehaviour
     #endregion
 
     #region Animation
-    private void Reset()
+    public void Reset()
     {
-        isDetect = false;
-        cmEffect.imgAlph = 0;
-        vCam.m_Lens.OrthographicSize = 12;
-        transform.position = new Vector2(ckPoint.position.x, transform.position.y);
-        Detected.SetActive(false);
+        if (isReset)
+        {
+            transform.position = new Vector2(ckPoint.position.x, transform.position.y);
+            Detected.SetActive(false);
+            isDetect = false;
+            isReset = false;
+        }
     }
 
     private void SmootAnimation()
@@ -231,6 +250,10 @@ public class PlayerController : MonoBehaviour
     {
         return Physics2D.OverlapCircle(interactive.position, 0.2f, jumpLayer)
             .gameObject.GetComponent<TypeJump>().typejump;
+    }
+    private Transform Transfr()
+    {
+        return Physics2D.OverlapCircle(interactive.position, 0.2f, ckPointLayer).transform;
     }
     #endregion
 }
