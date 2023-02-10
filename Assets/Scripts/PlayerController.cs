@@ -1,125 +1,111 @@
 using Cinemachine;
-using System.Collections;
-using Unity.Mathematics;
+using System;
+using System.Threading.Tasks;
 using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-    private void Start() => rb = GetComponent<Rigidbody2D>();
+    private void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+        animator = GetComponent<Animator>();
+    }
 
     void Update()
     {
-        if(Input.GetKey(KeyCode.Escape)) Application.Quit();
+        GetPoint();
+        InputCheck();
+    }
 
-        if (!isUp)
+    private void FixedUpdate()
+    {
+        if (!isDetect)
         {
-            if (!isDetect)
-            {
-                InputCheck();
-                InteractiveSystem();
-                FlipPosition();
-                DancingDu();
-                SmootAnimation();
-            }
-            else
-            {
-                AnimatorController("Detect");
-            }
+            InteractiveSystem();
+            WarningAndDetectSatuts();
+            SmootAnimationParameters();
         }
-
-        Reset();
-        ChekPoint();
+        else Camera();
     }
 
     #region variables
     [Header("Movement")]
     [SerializeField][Range (1, 80)] private float speedWalk;
     [SerializeField][Range (1, 80)] private float speedRun;
+    private Rigidbody2D rb;
+    private float horizontal, HorizontalAsist;
 
     [Header("Checkers")]
-    [SerializeField] private Transform groundCheck;
-    [SerializeField] private Transform interactive;
-    [SerializeField] private LayerMask groundLayer;
-    [SerializeField] private LayerMask pushLayer;
-    [SerializeField] private LayerMask jumpLayer;
-    [SerializeField] private LayerMask warningLayer;
-    [SerializeField] private LayerMask detectLayer;
-    [SerializeField] private LayerMask ckPointLayer;
+    [SerializeField] private GroundChek groundchek;
+    [SerializeField] private InteractiveChek interactivechek;
+    private bool rightFlip = true, slowWalk = false, moving = false, isDetect = false;
 
     [Header ("Animation")]
-    [SerializeField] private Animator animator;
-    [SerializeField][Range(1, 10)] private float SmootAnimationEnter;
-    [SerializeField][Range(1, 10)] private float SmootAnimationExit;
+    [SerializeField][Range(1, 10)] private float SmootAnimationFactor;
     [SerializeField] private GameObject Warning, Detected;
+    private Animator animator;
 
     [Header("Camera")]
     [SerializeField] private CinemachineVirtualCamera vCam;
-    [SerializeField] private CamEffect cmEffect;
+    [SerializeField] private float camDistance;
 
     [Header("Point")]
     [SerializeField] private Transform ckPoint;
 
-    private Rigidbody2D rb;
-    private float horizontal, HorizontalAsist;
-    private float DanceEnter, timeToDance = 500;
-    private bool rightFlip = true, inputWalk = false, isUp, isDetect = false;
-
-    public bool isReset;
-
     private string
         // AxisRaw
-        Hz = "Horizontal",
+        Horzontal = "Horizontal",
         // Parameters
         AnimPushF = "CrouchPush", AnimRunF = "WalkRun",
-        AnimWalkF = "IdleWalk", AnimDanceF = "StartDance",
+        AnimWalkF = "IdleWalk",
         // Animations
         AnimFrontFlip = "Front Flip", AnimIdle = "Idle", 
         AnimWalkRun = "WRTree", AnimIdleWalk = "IWTree", AnimSimpleJump = "Jump", 
-        AnimPush = "Pushtree", AnimDance = "DTwek"; //AnimAtack = "Punch"
+        AnimPush = "Pushtree", AnimDetect = "Detect"; //AnimAtack = "Punch"
     #endregion
 
     #region Input
     private void InputCheck()
     {
-        inputWalk = Input.GetKey(KeyCode.LeftShift);
-        horizontal = Input.GetAxisRaw(Hz);
+        slowWalk = Input.GetKey(KeyCode.LeftShift);
+        horizontal = Input.GetAxisRaw(Horzontal);
+
+        if (horizontal != 0) moving = true;
+        else moving = false;
     }
     #endregion
 
     #region Interactive System
     private void InteractiveSystem()
     {
-        if (IsGrounded())
+        if (OnGround())
         {
-            if (!InteractiveType(jumpLayer))
+            if (!InteractiveType(interactivechek.jump_))
             {
-                if (!InteractiveType(pushLayer))
+                if (!InteractiveType(interactivechek.push_))
                 {
-                    if (horizontal == 0) Idle(); // Idle ----------------------------
-                    else Move(); // Move ------------------------------------------
-                } else Push(); // Push ------------------------------------------
-            } else Jump(); //Jump -------------------------------------------
+                    if (!moving)
+                    {
+                        Idle();
+                    }
+                    else Move();
+                } 
+                else Push();
+            } 
+            else Jump();
         }
-        
-        // Warnig ----------------------------------------------
-        if (InteractiveType(warningLayer)) Warning.SetActive(true);
-        else Warning.SetActive(false);
-
-        // Detected --------------------------------------------
-        if (InteractiveType(detectLayer)) isDetect = true;
     }
     #endregion
 
     #region Actions
     private void Idle()
     {
-        if (timeToDance > 0)
-            AnimatorController(AnimIdle);
+        AnimatorController(AnimIdle);
     }
 
     private void Move()
     {
-        if (inputWalk)
+        if (slowWalk)
         {
             AnimatorController(AnimIdleWalk);
             ApplyMove(speedWalk);
@@ -149,111 +135,141 @@ public class PlayerController : MonoBehaviour
                 rb.velocity = new Vector2(horizontal * 40, rb.velocity.y + 10f);
                 AnimatorController(AnimSimpleJump);
                 break;
-            case 2:
-                transform.position = new Vector2(transform.position.x + 1.5f, transform.position.y + 2f);
-                AnimatorController("UpBox");
-                break;
         }
     }
 
-    private void ChekPoint()
+    private async void WarningAndDetectSatuts()
     {
-        if (InteractiveType(ckPointLayer)) ckPoint = Transfr();
+        if (InteractiveType(interactivechek.detect_))
+        {
+            AnimatorController(AnimDetect);
+            isDetect = true;
+            await Task.Yield();
+        }
+
+        if (InteractiveType(interactivechek.warning_)) Warning.SetActive(true);
+        else Warning.SetActive(false);
+    }
+
+    private void Camera()
+    {
+        vCam.m_Lens.OrthographicSize = camDistance;
+    }
+    #endregion
+
+    #region CheckPoint
+    private void GetPoint()
+    {
+        if (InteractiveType(interactivechek.Point_)) ckPoint = Transfr();
     }
     #endregion
 
     #region Direction
     private void ApplyMove(float speed)
     {
-        transform.position = new Vector2(transform.position.x + (speed * horizontal) * Time.deltaTime, transform.position.y);
+        transform.position = new Vector2(transform.position.x + speed * horizontal * Time.deltaTime, transform.position.y);
+        Flip();
     }
 
-    private void FlipPosition()
+    private void Flip()
     {
         if (rightFlip && horizontal < 0f || !rightFlip && horizontal > 0f)
         {
             rightFlip = !rightFlip;
-            Vector3 localScale = transform.localScale;
-            localScale.x *= -1f;
-            transform.localScale = localScale;
+            transform.rotation = Quaternion.Inverse(transform.rotation);
         }
     }
     #endregion
 
     #region Animation
-    public void Reset()
-    {
-        if (isReset)
-        {
-            transform.position = new Vector2(ckPoint.position.x, transform.position.y);
-            Detected.SetActive(false);
-            isDetect = false;
-            isReset = false;
-        }
-    }
-
-    private void SmootAnimation()
+    private async void SmootAnimationParameters()
     {
         if (horizontal != 0)
             if (HorizontalAsist < 1)
-                HorizontalAsist += SmootAnimationEnter * Time.deltaTime;
+                HorizontalAsist += SmootAnimationFactor * Time.deltaTime;
 
         if (horizontal == 0)
             if (HorizontalAsist > 0)
-                HorizontalAsist -= SmootAnimationExit * Time.deltaTime;
+                HorizontalAsist -= SmootAnimationFactor * Time.deltaTime;
+
+        await Task.Yield();
     }
 
-    private void AnimatorController(string anm)
+    private async void AnimatorController(string animation)
     {
         animator.SetFloat(AnimPushF, HorizontalAsist);
         animator.SetFloat(AnimRunF, HorizontalAsist);
         animator.SetFloat(AnimWalkF, HorizontalAsist);
-        animator.SetFloat(AnimDanceF, DanceEnter);
-
-        animator.Play(anm);
+        animator.Play(animation);
+        await Task.Yield();
     }
 
-
-    private void DancingDu()
+    public void ResetDetect()
     {
-        if (Input.anyKeyDown || InteractiveType(pushLayer))
-        {
-            timeToDance = 500f;
-            DanceEnter = 0;
-        }
-
-        if (timeToDance > 0)
-            timeToDance -= 5f * Time.deltaTime;
-
-        if (timeToDance <= 0)
-        {
-            if (DanceEnter <= 1)
-                DanceEnter += 2.5f * Time.deltaTime;
-
-            AnimatorController(AnimDance);
-        }
+        transform.position = new Vector2(ckPoint.position.x, transform.position.y);
+        vCam.m_Lens.OrthographicSize = 8;
+        isDetect = false;
     }
     #endregion
 
     #region Checkers
-    private bool IsGrounded()
+    private bool OnGround()
     {
-        return Physics2D.OverlapCircle(groundCheck.position, 1f, groundLayer);
+        return Physics.Raycast(transform.position, -transform.up,
+            out groundchek.hit, groundchek.distance, groundchek.ground_);
     }
-
+    
     private bool InteractiveType(LayerMask layer)
     {
-        return Physics2D.OverlapCircle(interactive.position, 0.2f, layer);
+        var pos = new Vector3(transform.position.x, transform.position.y +
+            interactivechek.rayPosition, transform.position.z);
+
+        return Physics.Raycast(pos, transform.forward, 
+            out interactivechek.hit, interactivechek.distance, layer);
     }
 
     private int Type()
     {
-        return Physics2D.OverlapCircle(interactive.position, 0.2f, jumpLayer)
-            .gameObject.GetComponent<TypeJump>().typejump;
+        return interactivechek.hit.transform.GetComponent<TypeJump>().typejump;
     }
+
     private Transform Transfr()
     {
-        return Physics2D.OverlapCircle(interactive.position, 0.2f, ckPointLayer).transform;
+        return interactivechek.hit.transform.GetComponent<Transform>();
     }
     #endregion
+
+    #region Editor mode
+#if UNITY_EDITOR
+    void OnDrawGizmos()
+    {
+        Gizmos.color = Color.red;
+        Gizmos.DrawRay(transform.position, -transform.up * groundchek.distance);
+
+        var pos = new Vector3(transform.position.x, transform.position.y +
+            interactivechek.rayPosition, transform.position.z);
+
+        Gizmos.DrawRay(pos, transform.forward * interactivechek.distance);
+    }
+#endif
+    #endregion
 }
+
+#region Check class
+[Serializable]
+public class GroundChek
+{
+    [HideInInspector] public RaycastHit hit;
+    public LayerMask ground_;
+    public float distance;
+}
+
+[Serializable]
+public class InteractiveChek
+{
+    [HideInInspector] public RaycastHit hit;
+    public LayerMask push_, jump_, 
+        warning_, detect_, Point_;
+    public float distance, rayPosition;
+}
+#endregion
