@@ -1,15 +1,16 @@
+using System.Collections;
+using System.Diagnostics;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
     private void Awake()
     {
-        rb = GetComponent<Rigidbody>();
-        detectSystem = GetComponent<DetectSystem>();
         animationSystem = GetComponent<AnimationSystem>();
     }
 
-    void Update()
+    private void Update()
     {
         InputCheck();
     }
@@ -18,20 +19,18 @@ public class PlayerController : MonoBehaviour
     [Header("Movement")]
     [SerializeField][Range(1, 80)] private float speedWalk;
     [SerializeField][Range(1, 80)] private float speedRun;
+    [SerializeField][Range(-50, 50)] private float gravityForce;
+    [SerializeField][Range(-50, 50)] private float XgravityForce;
+    [SerializeField][Range(0, 5000)] private float jumpPower;
 
-    private Rigidbody rb;
     private float horizontal;
-    private bool rightFlip = true, slowWalk = false;
+    private bool rightFlip = true, SlowWalk = false;
 
     readonly private string Horzontal = "Horizontal";
-
-    private DetectSystem detectSystem;
 
     // Animation
     private AnimationSystem animationSystem;
     readonly private string
-        //machine state
-        move = "move", push = "push", jump = "jump", warning = "warning", tryPush = "trypush",
         //animation
         AnimFrontFlip = "Front Flip", AnimIdle = "Idle",
         AnimWalkRun = "WRTree", AnimIdleWalk = "IWTree", AnimSimpleJump = "Jump",
@@ -41,8 +40,10 @@ public class PlayerController : MonoBehaviour
     #region Input
     private void InputCheck()
     {
-        slowWalk = Input.GetKey(KeyCode.LeftShift);
+        SlowWalk = Input.GetKey(KeyCode.LeftShift);
         horizontal = Input.GetAxisRaw(Horzontal);
+
+        //float targetSpeed = horizontal !=0 ? speedRun : speedWalk;
     }
     #endregion
 
@@ -51,7 +52,7 @@ public class PlayerController : MonoBehaviour
     {
         if (horizontal != 0)
         {
-            if (slowWalk)
+            if (SlowWalk)
             {
                 animationSystem.AnimatorController(AnimIdleWalk);
                 ApplyMove(speedWalk);
@@ -74,24 +75,23 @@ public class PlayerController : MonoBehaviour
         ApplyMove(speedWalk);
     }
 
-    private void Jump()
+    private IEnumerator Jump(int j)
     {
-        switch (detectSystem.JumpT)
+        switch (j)
         {
             case 0:
-                rb.velocity = new Vector2(horizontal * 40, rb.velocity.y + 15.5f);
+                gravityForce = 30;
+                XgravityForce = 30;
+                transform.position += new Vector3(0, jumpPower * Time.deltaTime, 0);
                 animationSystem.AnimatorController(AnimFrontFlip);
+                yield return new WaitForSeconds(.6f);
+                XgravityForce = 0;
+                gravityForce = -24;
                 break;
             case 1:
-                rb.velocity = new Vector2(horizontal * 40, rb.velocity.y + 10f);
                 animationSystem.AnimatorController(AnimSimpleJump);
                 break;
         }
-    }
-
-    private void Warning()
-    {
-        animationSystem.AnimatorController(AnimDetect);
     }
 
     private void TryPush()
@@ -99,17 +99,25 @@ public class PlayerController : MonoBehaviour
         animationSystem.AnimatorController(AnimTryPush);
         ApplyMove(speedWalk);
     }
+
+    private void Warning()
+    {
+        animationSystem.AnimatorController(AnimDetect);
+    }
+
+    private void Gravity()
+    {
+        Physics.gravity = new Vector2(XgravityForce, gravityForce);
+    }
     #endregion
 
     #region Calls
-    public void CallSMachine(string State)
-    {
-        if (State == move) Move();
-        if (State == push) Push();
-        if (State == jump) Jump();
-        if (State == tryPush) TryPush();
-        if (State == warning) Warning();
-    }
+    public void CallMove() => Move();
+    public void CallPush() => Push();
+    public void CallTryPush() => TryPush();
+    public void CallJump(int j) => StartCoroutine(Jump(j));
+    public void CallWarning() => Warning();
+    public void CallGravity() => Gravity();
     #endregion
 
     #region Movement

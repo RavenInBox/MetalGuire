@@ -1,61 +1,45 @@
+using System;
 using UnityEngine;
+using UnityEngine.Events;
+using static UnityEditor.Searcher.SearcherWindow.Alignment;
 
 public class DetectSystem : MonoBehaviour
 {
-    private void Awake()
-    {
-        playerController = GetComponent<PlayerController>();
-    }
-
     private void FixedUpdate()
     {
-        if (!IsFail) CallMachine();
+        CallMachine();
     }
 
     #region variables
+    [Header("Raycast configuration")]
+    [SerializeField] private float gDistance;
+    [SerializeField] private float iDistance;
+    [SerializeField] private float rayPosition;
     private RaycastHit hitInteractive;
-    private PlayerController playerController;
-    public float gDistance, iDistance, rayIPosition, rayEPosition;
 
-    [SerializeField] private GameObject Warning, Detected;
+    [Header("Warning/Detect gameobject")]
+    [SerializeField] private GameObject WarningGm;
+    [SerializeField] private GameObject Detected;
 
-    [Header("Layers")]
-    [SerializeField] private LayerMask jumpL;
-    [SerializeField] private LayerMask pushL;
-    [SerializeField] private LayerMask pointL;
-    [SerializeField] private LayerMask warningL;
-    [SerializeField] private LayerMask detectL;
-    [SerializeField] private LayerMask tryPushL;
-    [SerializeField] private LayerMask groundL;
-
-    readonly private string move = "move", push = "push",
-        jump = "jump", warning = "warning", tryPush = "trypush";
+    [SerializeField] private Layers layers;
+    [SerializeField] private Callers callers;
 
     public bool IsFail { get; set; }
     #endregion
 
     #region Checkers
-    private bool OnGround()
+    private bool OnGroundCheck()
     {
         return Physics.Raycast(transform.position, -transform.up, 
-            gDistance, groundL);
+            gDistance, layers.ground);
     }
 
-    private bool IsInteractive(LayerMask l)
+    private bool InteractionCheck(LayerMask l)
     {
         var pos = new Vector3(transform.position.x, transform.position.y +
-            rayIPosition, transform.position.z);
+            rayPosition, transform.position.z);
 
         return Physics.Raycast(pos, transform.forward,
-            out hitInteractive, iDistance, l);
-    }
-
-    private bool Enemy(LayerMask l)
-    {
-        var pos = new Vector3(transform.position.x, transform.position.y +
-            rayEPosition, transform.position.z);
-
-        return Physics.Raycast(pos, transform.up,
             out hitInteractive, iDistance, l);
     }
     #endregion
@@ -63,43 +47,48 @@ public class DetectSystem : MonoBehaviour
     #region Call Machine
     private void CallMachine()
     {
-        if (OnGround())
+        if (!IsFail)
         {
-            if (!IsInteractive(jumpL))
+            if (OnGroundCheck())
             {
-                if (!IsInteractive(tryPushL))
+                if (!InteractionCheck(layers.jump))
                 {
-                    if (!IsInteractive(pushL))
+                    if (!InteractionCheck(layers.tryPush))
                     {
-                        playerController.CallSMachine(move);
+                        if (!InteractionCheck(layers.push))
+                        {
+                            callers.Move?.Invoke();
+                        }
+                        else callers.Push?.Invoke();
                     }
-                    else playerController.CallSMachine(push);
-                } 
-                else playerController.CallSMachine(tryPush);
+                    else callers.Trypush?.Invoke();
+                }
+                else callers.Jump?.Invoke(JumpT());
             }
-            else playerController.CallSMachine(jump);
-        }
+            else callers.Gravity?.Invoke();
 
-        if (Enemy(detectL))
-        {
-            playerController.CallSMachine(warning);
-            IsFail = true;
-        }
+            // CAMBIAR sistema de deteccion
+            if (InteractionCheck(layers.detect))
+            {
+                callers.Warnings?.Invoke();
+                IsFail = true;
+            }
 
-        if (Enemy(warningL)) Warning.SetActive(true);
-        else Warning.SetActive(false);
+            if (InteractionCheck(layers.warning)) WarningGm.SetActive(true);
+            else WarningGm.SetActive(false);
+        }
     }
     #endregion
 
     #region Getters
     public bool GetInteractive(LayerMask l)
     {
-        return IsInteractive(l);
+        return InteractionCheck(l);
     }
 
-    public int JumpT
+    private int JumpT()
     {
-        get { return hitInteractive.transform.GetComponent<TypeJump>().typejump; }
+        return hitInteractive.transform.GetComponent<TypeJump>().typejump;
     }
     #endregion
 
@@ -108,16 +97,37 @@ public class DetectSystem : MonoBehaviour
     void OnDrawGizmos()
     {
         var positionI = new Vector3(transform.position.x, transform.position.y +
-            rayIPosition, transform.position.z);
-        
-        var positionE = new Vector3(transform.position.x, transform.position.y +
-            rayEPosition, transform.position.z);
+            rayPosition, transform.position.z);
 
         Gizmos.color = Color.red;
         Gizmos.DrawRay(transform.position, -transform.up * gDistance);
         Gizmos.DrawRay(positionI, transform.forward * iDistance);
-        Gizmos.DrawRay(positionE, transform.up * iDistance);
     }
 #endif
     #endregion
 }
+
+#region Extend class
+[Serializable]
+public class Callers
+{
+    public UnityEvent Move;
+    public UnityEvent<int> Jump;
+    public UnityEvent Push;
+    public UnityEvent Trypush;
+    public UnityEvent Warnings;
+    public UnityEvent Gravity;
+}
+
+[Serializable]
+public class Layers
+{
+    public LayerMask jump;
+    public LayerMask push;
+    public LayerMask point;
+    public LayerMask warning;
+    public LayerMask detect;
+    public LayerMask tryPush;
+    public LayerMask ground;
+}
+#endregion
